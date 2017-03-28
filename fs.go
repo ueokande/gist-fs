@@ -90,6 +90,12 @@ func (dir *RootDir) Unmount() error {
 	return dir.server.Unmount()
 }
 
+func NewRoot() *RootDir {
+	return &RootDir{
+		Node: nodefs.NewDefaultNode(),
+	}
+}
+
 type GistDir struct {
 	nodefs.Node
 

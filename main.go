@@ -4,7 +4,40 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 )
+
+func signalNotify(f func(s os.Signal), sig ...os.Signal) {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, sig...)
+	go func() {
+		s := <-ch
+		f(s)
+	}()
+}
+
+func mountAndWait(username, password, mountpoint string) error {
+	done := make(chan struct{})
+
+	root := NewRoot()
+
+	signalNotify(func(s os.Signal) {
+		err := root.Unmount()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "failed to unmount:", err)
+		}
+		done <- struct{}{}
+	}, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM)
+
+	err := root.Mount(mountpoint)
+	if err != nil {
+		return err
+	}
+	<-done
+
+	return nil
+}
 
 func run() int {
 	flag.Usage = func() {
@@ -30,9 +63,10 @@ func run() int {
 		return 1
 	}
 
-	fmt.Println("username =", *username)
-	fmt.Println("password =", *password)
-	fmt.Println("mount to =", args[0])
+	err := mountAndWait(*username, *password, args[0])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "failed to mount:", err)
+	}
 
 	return 0
 }
