@@ -19,14 +19,17 @@ type Gist struct {
 	mtime time.Time
 }
 
-func (g *Gist) FetchFiles() ([]*File, error) {
-	return []*File{
-		&File{name: "main.c", content: []byte(`printf("Hello world\n");`)},
-		&File{name: "main.sh", content: []byte(`echo "Hello world\n"`)},
+func (g *Gist) FetchFiles() ([]*GistFile, error) {
+	return []*GistFile{
+		&GistFile{name: "main.c"},
+		&GistFile{name: "main.sh"},
 	}, nil
 }
 
-type File struct {
-	name    string
-	content []byte
+type GistFile struct {
+	name string
+}
+
+func (file *GistFile) FetchContent() ([]byte, error) {
+	return []byte(`printf("Hello world"\n)`), nil
 }
