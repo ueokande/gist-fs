@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"time"
 )
@@ -51,6 +53,12 @@ func (u *User) FetchGists() ([]*Gist, error) {
 	if err != nil {
 		return nil, err
 	}
+	for _, gist := range gists {
+		for name, file := range gist.Files {
+			fmt.Printf("[%s][%s] = %s\n", gist.Id, name, file.RawUrl)
+			file.user = u
+		}
+	}
 
 	return gists, nil
 }
@@ -67,9 +75,28 @@ func (g *Gist) ListFiles() map[string]*GistFile {
 }
 
 type GistFile struct {
-	Size uint64
+	Size   uint64
+	RawUrl string `json:"raw_url"`
+
+	user *User
 }
 
 func (file *GistFile) FetchContent() ([]byte, error) {
-	return []byte(`printf("Hello world"\n)`), nil
+	req, err := http.NewRequest("GET", file.RawUrl, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.SetBasicAuth(file.user.Username, file.user.Password)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	bytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return bytes, nil
 }

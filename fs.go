@@ -150,11 +150,7 @@ func (dir *File) IsDir() bool {
 }
 
 func (f *File) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
-	content, err := f.file.FetchContent()
-	if err != nil {
-		return fuse.ToStatus(err)
-	}
-	out.Size = uint64(len(content))
+	out.Size = f.file.Size
 	out.Mode = fuse.S_IFREG | 0444
 
 	return fuse.OK
