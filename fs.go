@@ -173,6 +173,10 @@ func (f *File) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse
 	out.Size = f.file.Size
 	out.Mode = fuse.S_IFREG | 0444
 
+	// TODO ctime/mtime from revision?
+	out.Ctime = uint64(f.file.Gist.CreatedAt.Unix())
+	out.Mtime = uint64(f.file.Gist.UpdatedAt.Unix())
+
 	return fuse.OK
 }
 

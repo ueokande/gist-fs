@@ -27,6 +27,7 @@ func (u *User) FetchGists() ([]*Gist, error) {
 
 	for _, gist := range gists {
 		for _, file := range gist.Files {
+			file.Gist = gist
 			file.user = u
 		}
 	}
@@ -50,6 +51,7 @@ func (g *Gist) ListFiles() map[string]*GistFile {
 type GistFile struct {
 	Size   uint64
 	RawUrl string `json:"raw_url"`
+	Gist   *Gist
 
 	user *User
 }
