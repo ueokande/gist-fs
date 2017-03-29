@@ -2,6 +2,7 @@ package main
 
 import (
 	"io/ioutil"
+	"log"
 	"net/http"
 	"time"
 )
@@ -23,11 +24,14 @@ func (u *User) FetchGists() ([]*Gist, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	for _, gist := range gists {
-		for name, file := range gist.Files {
+		for _, file := range gist.Files {
 			file.user = u
 		}
 	}
+
+	log.Printf("Fetched %d gists", len(gists))
 
 	return gists, nil
 }
@@ -61,6 +65,8 @@ func (file *GistFile) FetchContent() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	log.Printf("Fetched %s", file.RawUrl)
 
 	defer resp.Body.Close()
 	bytes, err := ioutil.ReadAll(resp.Body)
