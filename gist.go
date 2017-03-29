@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -16,33 +14,6 @@ type User struct {
 
 type Error struct {
 	Message string
-}
-
-func getJson(url, username, password string, v interface{}) error {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return err
-	}
-	req.SetBasicAuth(username, password)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-	d := json.NewDecoder(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		var errmsg Error
-		d.Decode(&errmsg)
-		if err != nil {
-			return err
-		}
-		return errors.New(errmsg.Message)
-	}
-
-	return d.Decode(v)
 }
 
 func (u *User) FetchGists() ([]*Gist, error) {
