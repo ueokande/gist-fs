@@ -1,9 +1,13 @@
 package main
 
 import (
+	"time"
+
 	"github.com/hanwen/go-fuse/fuse"
 	"github.com/hanwen/go-fuse/fuse/nodefs"
 )
+
+var CachePeriod = time.Duration(5 * time.Minute)
 
 type FileNode interface {
 	nodefs.Node
@@ -50,6 +54,9 @@ type RootDir struct {
 	server *fuse.Server
 
 	user *User
+
+	lastFetchAt time.Time
+	cache       []*Gist
 }
 
 func (dir *RootDir) OpenDir(ctx *fuse.Context) ([]fuse.DirEntry, fuse.Status) {
@@ -61,12 +68,17 @@ func (dir *RootDir) Name() string {
 }
 
 func (dir *RootDir) List() ([]FileNode, error) {
-	gists, err := dir.user.FetchGists()
-	if err != nil {
-		return nil, err
+	if now := time.Now(); dir.lastFetchAt.Add(CachePeriod).Before(time.Now()) {
+		var err error
+		dir.cache, err = dir.user.FetchGists()
+		if err != nil {
+			return nil, err
+		}
+		dir.lastFetchAt = now
 	}
-	children := make([]FileNode, len(gists))
-	for i, gist := range gists {
+
+	children := make([]FileNode, len(dir.cache))
+	for i, gist := range dir.cache {
 		children[i] = &GistDir{
 			Node: nodefs.NewDefaultNode(),
 			gist: gist,

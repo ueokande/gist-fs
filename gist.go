@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"time"
@@ -26,7 +25,6 @@ func (u *User) FetchGists() ([]*Gist, error) {
 	}
 	for _, gist := range gists {
 		for name, file := range gist.Files {
-			fmt.Printf("[%s][%s] = %s\n", gist.Id, name, file.RawUrl)
 			file.user = u
 		}
 	}
