@@ -38,8 +38,8 @@ func (u *User) FetchGists() ([]*Gist, error) {
 
 type Gist struct {
 	Id        string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 	Files     map[string]*GistFile
 }
 

@@ -127,6 +127,14 @@ func (dir *GistDir) IsDir() bool {
 	return true
 }
 
+func (f *GistDir) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
+	out.Mode = fuse.S_IFDIR | 0555
+	out.Ctime = uint64(f.gist.CreatedAt.Unix())
+	out.Mtime = uint64(f.gist.UpdatedAt.Unix())
+
+	return fuse.OK
+}
+
 func (dir *GistDir) OpenDir(ctx *fuse.Context) ([]fuse.DirEntry, fuse.Status) {
 	return openDir(dir)
 }
