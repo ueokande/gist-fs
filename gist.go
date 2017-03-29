@@ -1,33 +1,73 @@
 package main
 
-import "time"
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"time"
+)
 
 type User struct {
+	Username string
+	Password string
 }
 
-func (r *User) FetchGists() ([]*Gist, error) {
-	return []*Gist{
-		&Gist{id: "abcd1234"},
-		&Gist{id: "wxyz5678"},
-		&Gist{id: "AABBCCDD"},
-	}, nil
+type Error struct {
+	Message string
+}
+
+func getJson(url, username, password string, v interface{}) error {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth(username, password)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+	d := json.NewDecoder(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		var errmsg Error
+		d.Decode(&errmsg)
+		if err != nil {
+			return err
+		}
+		return errors.New(errmsg.Message)
+	}
+
+	return d.Decode(v)
+}
+
+func (u *User) FetchGists() ([]*Gist, error) {
+	const url = "https://api.github.com/gists"
+
+	var gists []*Gist
+	err := getJson(url, u.Username, u.Password, &gists)
+	if err != nil {
+		return nil, err
+	}
+
+	return gists, nil
 }
 
 type Gist struct {
-	id    string
-	ctime time.Time
-	mtime time.Time
+	Id        string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Files     map[string]*GistFile
 }
 
-func (g *Gist) FetchFiles() ([]*GistFile, error) {
-	return []*GistFile{
-		&GistFile{name: "main.c"},
-		&GistFile{name: "main.sh"},
-	}, nil
+func (g *Gist) ListFiles() map[string]*GistFile {
+	return g.Files
 }
 
 type GistFile struct {
-	name string
+	Size uint64
 }
 
 func (file *GistFile) FetchContent() ([]byte, error) {

@@ -67,10 +67,11 @@ func (dir *RootDir) List() ([]FileNode, error) {
 	}
 	children := make([]FileNode, len(gists))
 	for i, gist := range gists {
-		children[i] = GistDir{
+		children[i] = &GistDir{
 			Node: nodefs.NewDefaultNode(),
 			gist: gist,
 		}
+
 	}
 	return children, nil
 }
@@ -90,9 +91,13 @@ func (dir *RootDir) Unmount() error {
 	return dir.server.Unmount()
 }
 
-func NewRoot() *RootDir {
+func NewRoot(username, password string) *RootDir {
 	return &RootDir{
 		Node: nodefs.NewDefaultNode(),
+		user: &User{
+			Username: username,
+			Password: password,
+		},
 	}
 }
 
@@ -102,29 +107,29 @@ type GistDir struct {
 	gist *Gist
 }
 
-func (dir GistDir) Name() string {
-	return dir.gist.id
+func (dir *GistDir) Name() string {
+	return dir.gist.Id
 }
 
-func (dir GistDir) IsDir() bool {
+func (dir *GistDir) IsDir() bool {
 	return true
 }
 
-func (dir GistDir) OpenDir(ctx *fuse.Context) ([]fuse.DirEntry, fuse.Status) {
+func (dir *GistDir) OpenDir(ctx *fuse.Context) ([]fuse.DirEntry, fuse.Status) {
 	return openDir(dir)
 }
 
-func (dir GistDir) List() ([]FileNode, error) {
-	files, err := dir.gist.FetchFiles()
-	if err != nil {
-		return nil, err
-	}
+func (dir *GistDir) List() ([]FileNode, error) {
+	files := dir.gist.ListFiles()
 	children := make([]FileNode, len(files))
-	for i, file := range files {
-		children[i] = File{
+	var index int
+	for name, file := range files {
+		children[index] = &File{
 			Node: nodefs.NewDefaultNode(),
+			name: name,
 			file: file,
 		}
+		index++
 	}
 	return children, nil
 }
@@ -132,28 +137,30 @@ func (dir GistDir) List() ([]FileNode, error) {
 type File struct {
 	nodefs.Node
 
+	name string
 	file *GistFile
 }
 
-func (dir File) Name() string {
-	return dir.file.name
+func (dir *File) Name() string {
+	return dir.name
 }
 
-func (dir File) IsDir() bool {
+func (dir *File) IsDir() bool {
 	return false
 }
 
-func (f File) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
+func (f *File) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
 	content, err := f.file.FetchContent()
 	if err != nil {
 		return fuse.ToStatus(err)
 	}
 	out.Size = uint64(len(content))
 	out.Mode = fuse.S_IFREG | 0444
+
 	return fuse.OK
 }
 
-func (f File) Open(flags uint32, ctx *fuse.Context) (nodefs.File, fuse.Status) {
+func (f *File) Open(flags uint32, ctx *fuse.Context) (nodefs.File, fuse.Status) {
 	if flags&fuse.O_ANYWRITE != 0 {
 		return nil, fuse.EPERM
 	}

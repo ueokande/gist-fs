@@ -20,7 +20,7 @@ func signalNotify(f func(s os.Signal), sig ...os.Signal) {
 func mountAndWait(username, password, mountpoint string) error {
 	done := make(chan struct{})
 
-	root := NewRoot()
+	root := NewRoot(username, password)
 
 	signalNotify(func(s os.Signal) {
 		err := root.Unmount()
