@@ -107,6 +107,22 @@ func openDir(dir DirNode) ([]fuse.DirEntry, fuse.Status) {
 	return entries, fuse.OK
 }
 
+func lookup(dir DirNode, out *fuse.Attr, name string, context *fuse.Context) (*nodefs.Inode, fuse.Status) {
+	_, status := openDir(dir)
+	if status != fuse.OK {
+		return nil, status
+	}
+	c := dir.Inode().GetChild(name)
+	if c == nil {
+		return nil, fuse.ENOENT
+	}
+	status = c.Node().GetAttr(out, nil, context)
+	if status != fuse.OK {
+		return nil, status
+	}
+	return c, fuse.OK
+}
+
 type RootDir struct {
 	nodefs.Node
 
@@ -120,6 +136,10 @@ type RootDir struct {
 
 func (dir *RootDir) OpenDir(ctx *fuse.Context) ([]fuse.DirEntry, fuse.Status) {
 	return openDir(dir)
+}
+
+func (dir *RootDir) Lookup(out *fuse.Attr, name string, context *fuse.Context) (*nodefs.Inode, fuse.Status) {
+	return lookup(dir, out, name, context)
 }
 
 func (dir *RootDir) Name() string {
@@ -198,6 +218,10 @@ func (dir *GistDir) OpenDir(ctx *fuse.Context) ([]fuse.DirEntry, fuse.Status) {
 	return openDir(dir)
 }
 
+func (dir *GistDir) Lookup(out *fuse.Attr, name string, context *fuse.Context) (*nodefs.Inode, fuse.Status) {
+	return lookup(dir, out, name, context)
+}
+
 func (dir *GistDir) List() ([]FileNode, error) {
 	files := dir.gist.Files
 	children := make([]FileNode, len(files)+1) // +1 : meta directory
@@ -240,6 +264,10 @@ func (f *GistMetaDir) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Contex
 }
 func (f *GistMetaDir) OpenDir(ctx *fuse.Context) ([]fuse.DirEntry, fuse.Status) {
 	return openDir(f)
+}
+
+func (dir *GistMetaDir) Lookup(out *fuse.Attr, name string, context *fuse.Context) (*nodefs.Inode, fuse.Status) {
+	return lookup(dir, out, name, context)
 }
 
 func (f *GistMetaDir) List() ([]FileNode, error) {
