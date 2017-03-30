@@ -16,6 +16,65 @@ type FileNode interface {
 	IsDir() bool
 }
 
+type StringFile struct {
+	nodefs.Node
+
+	name  string
+	value string
+}
+
+func (f *StringFile) Name() string {
+	return f.name
+}
+
+func (f *StringFile) IsDir() bool {
+	return false
+}
+
+func (f *StringFile) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
+	out.Size = uint64(len([]byte(f.value)) + 1)
+	out.Mode = fuse.S_IFREG | 0444
+	return fuse.OK
+}
+
+func (f *StringFile) Open(flags uint32, ctx *fuse.Context) (nodefs.File, fuse.Status) {
+	if flags&fuse.O_ANYWRITE != 0 {
+		return nil, fuse.EPERM
+	}
+	return nodefs.NewDataFile([]byte(f.value + "\n")), fuse.OK
+}
+
+type BoolFile struct {
+	nodefs.Node
+
+	name  string
+	value bool
+}
+
+func (f *BoolFile) Name() string {
+	return f.name
+}
+
+func (f *BoolFile) IsDir() bool {
+	return false
+}
+
+func (f *BoolFile) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
+	out.Size = 2
+	out.Mode = fuse.S_IFREG | 0444
+	return fuse.OK
+}
+
+func (f *BoolFile) Open(flags uint32, ctx *fuse.Context) (nodefs.File, fuse.Status) {
+	if flags&fuse.O_ANYWRITE != 0 {
+		return nil, fuse.EPERM
+	}
+	if f.value {
+		return nodefs.NewDataFile([]byte("1\n")), fuse.OK
+	}
+	return nodefs.NewDataFile([]byte("0\n")), fuse.OK
+}
+
 type DirNode interface {
 	nodefs.Node
 
@@ -127,13 +186,21 @@ func (dir *GistDir) IsDir() bool {
 	return true
 }
 
+func (f *GistDir) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
+	out.Mode = fuse.S_IFDIR | 0555
+	out.Ctime = uint64(f.gist.CreatedAt.Unix())
+	out.Mtime = uint64(f.gist.UpdatedAt.Unix())
+
+	return fuse.OK
+}
+
 func (dir *GistDir) OpenDir(ctx *fuse.Context) ([]fuse.DirEntry, fuse.Status) {
 	return openDir(dir)
 }
 
 func (dir *GistDir) List() ([]FileNode, error) {
 	files := dir.gist.ListFiles()
-	children := make([]FileNode, len(files))
+	children := make([]FileNode, len(files)+1) // +1 : meta directory
 	var index int
 	for name, file := range files {
 		children[index] = &File{
@@ -143,7 +210,56 @@ func (dir *GistDir) List() ([]FileNode, error) {
 		}
 		index++
 	}
+	children[len(children)-1] = &GistMetaDir{
+		Node: nodefs.NewDefaultNode(),
+		gist: dir.gist,
+	}
 	return children, nil
+}
+
+type GistMetaDir struct {
+	nodefs.Node
+
+	gist *Gist
+}
+
+func (f *GistMetaDir) Name() string {
+	return ".gist"
+}
+
+func (f *GistMetaDir) IsDir() bool {
+	return true
+}
+
+func (f *GistMetaDir) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
+	out.Mode = fuse.S_IFDIR | 0555
+	out.Ctime = uint64(f.gist.CreatedAt.Unix())
+	out.Mtime = uint64(f.gist.UpdatedAt.Unix())
+
+	return fuse.OK
+}
+func (f *GistMetaDir) OpenDir(ctx *fuse.Context) ([]fuse.DirEntry, fuse.Status) {
+	return openDir(f)
+}
+
+func (f *GistMetaDir) List() ([]FileNode, error) {
+	return []FileNode{
+		&StringFile{
+			Node:  nodefs.NewDefaultNode(),
+			name:  "description",
+			value: f.gist.Description,
+		},
+		&StringFile{
+			Node:  nodefs.NewDefaultNode(),
+			name:  "id",
+			value: f.gist.Id,
+		},
+		&BoolFile{
+			Node:  nodefs.NewDefaultNode(),
+			name:  "public",
+			value: f.gist.Public,
+		},
+	}, nil
 }
 
 type File struct {
@@ -164,6 +280,10 @@ func (dir *File) IsDir() bool {
 func (f *File) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
 	out.Size = f.file.Size
 	out.Mode = fuse.S_IFREG | 0444
+
+	// TODO ctime/mtime from revision?
+	out.Ctime = uint64(f.file.Gist.CreatedAt.Unix())
+	out.Mtime = uint64(f.file.Gist.UpdatedAt.Unix())
 
 	return fuse.OK
 }
