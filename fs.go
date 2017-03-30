@@ -33,7 +33,7 @@ func (f *StringFile) IsDir() bool {
 
 func (f *StringFile) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
 	out.Size = uint64(len([]byte(f.value)) + 1)
-	out.Mode = fuse.S_IFREG | 0444
+	out.Mode = fuse.S_IFREG | 0644
 	return fuse.OK
 }
 
@@ -61,7 +61,7 @@ func (f *BoolFile) IsDir() bool {
 
 func (f *BoolFile) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
 	out.Size = 2
-	out.Mode = fuse.S_IFREG | 0444
+	out.Mode = fuse.S_IFREG | 0644
 	return fuse.OK
 }
 
@@ -93,9 +93,9 @@ func openDir(dir DirNode) ([]fuse.DirEntry, fuse.Status) {
 	for i, f := range files {
 		var mode uint32
 		if f.IsDir() {
-			mode = fuse.S_IFDIR | 0555
+			mode = fuse.S_IFDIR | 0755
 		} else {
-			mode = fuse.S_IFREG | 0444
+			mode = fuse.S_IFREG | 0644
 		}
 		entries[i] = fuse.DirEntry{
 			Name: f.Name(),
@@ -187,7 +187,7 @@ func (dir *GistDir) IsDir() bool {
 }
 
 func (f *GistDir) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
-	out.Mode = fuse.S_IFDIR | 0555
+	out.Mode = fuse.S_IFDIR | 0755
 	out.Ctime = uint64(f.gist.CreatedAt.Unix())
 	out.Mtime = uint64(f.gist.UpdatedAt.Unix())
 
@@ -232,7 +232,7 @@ func (f *GistMetaDir) IsDir() bool {
 }
 
 func (f *GistMetaDir) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
-	out.Mode = fuse.S_IFDIR | 0555
+	out.Mode = fuse.S_IFDIR | 0755
 	out.Ctime = uint64(f.gist.CreatedAt.Unix())
 	out.Mtime = uint64(f.gist.UpdatedAt.Unix())
 
@@ -279,7 +279,7 @@ func (dir *File) IsDir() bool {
 
 func (f *File) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
 	out.Size = f.file.Size
-	out.Mode = fuse.S_IFREG | 0444
+	out.Mode = fuse.S_IFREG | 0644
 
 	// TODO ctime/mtime from revision?
 	out.Ctime = uint64(f.file.Gist.CreatedAt.Unix())
