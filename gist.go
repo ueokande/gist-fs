@@ -46,10 +46,6 @@ type Gist struct {
 	Files       map[string]*GistFile
 }
 
-func (g *Gist) ListFiles() map[string]*GistFile {
-	return g.Files
-}
-
 type GistFile struct {
 	Size   uint64
 	RawUrl string `json:"raw_url"`

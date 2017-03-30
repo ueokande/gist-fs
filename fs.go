@@ -199,7 +199,7 @@ func (dir *GistDir) OpenDir(ctx *fuse.Context) ([]fuse.DirEntry, fuse.Status) {
 }
 
 func (dir *GistDir) List() ([]FileNode, error) {
-	files := dir.gist.ListFiles()
+	files := dir.gist.Files
 	children := make([]FileNode, len(files)+1) // +1 : meta directory
 	var index int
 	for name, file := range files {
