@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type User struct {
+type Client struct {
 	Username string
 	Password string
 }
@@ -16,11 +16,11 @@ type Error struct {
 	Message string
 }
 
-func (u *User) FetchGists() ([]*Gist, error) {
+func (c *Client) FetchGists() ([]*Gist, error) {
 	const url = "https://api.github.com/gists"
 
 	var gists []*Gist
-	err := getJson(url, u.Username, u.Password, &gists)
+	err := getJson(url, c.Username, c.Password, &gists)
 	if err != nil {
 		return nil, err
 	}
@@ -28,7 +28,6 @@ func (u *User) FetchGists() ([]*Gist, error) {
 	for _, gist := range gists {
 		for _, file := range gist.Files {
 			file.Gist = gist
-			file.user = u
 		}
 	}
 
@@ -50,23 +49,21 @@ type GistFile struct {
 	Size   uint64
 	RawUrl string `json:"raw_url"`
 	Gist   *Gist
-
-	user *User
 }
 
-func (file *GistFile) FetchContent() ([]byte, error) {
-	req, err := http.NewRequest("GET", file.RawUrl, nil)
+func (c *Client) FetchContent(url string) ([]byte, error) {
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.SetBasicAuth(file.user.Username, file.user.Password)
+	req.SetBasicAuth(c.Username, c.Password)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Printf("Fetched %s", file.RawUrl)
+	log.Printf("Fetched %s", url)
 
 	defer resp.Body.Close()
 	bytes, err := ioutil.ReadAll(resp.Body)

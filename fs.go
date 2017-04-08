@@ -128,7 +128,7 @@ type RootDir struct {
 
 	server *fuse.Server
 
-	user *User
+	client *Client
 
 	lastFetchAt time.Time
 	cache       []*Gist
@@ -149,7 +149,7 @@ func (dir *RootDir) Name() string {
 func (dir *RootDir) List() ([]FileNode, error) {
 	if now := time.Now(); dir.lastFetchAt.Add(CachePeriod).Before(time.Now()) {
 		var err error
-		dir.cache, err = dir.user.FetchGists()
+		dir.cache, err = dir.client.FetchGists()
 		if err != nil {
 			return nil, err
 		}
@@ -159,8 +159,9 @@ func (dir *RootDir) List() ([]FileNode, error) {
 	children := make([]FileNode, len(dir.cache))
 	for i, gist := range dir.cache {
 		children[i] = &GistDir{
-			Node: nodefs.NewDefaultNode(),
-			gist: gist,
+			Node:   nodefs.NewDefaultNode(),
+			client: dir.client,
+			gist:   gist,
 		}
 
 	}
@@ -185,7 +186,7 @@ func (dir *RootDir) Unmount() error {
 func NewRoot(username, password string) *RootDir {
 	return &RootDir{
 		Node: nodefs.NewDefaultNode(),
-		user: &User{
+		client: &Client{
 			Username: username,
 			Password: password,
 		},
@@ -194,6 +195,8 @@ func NewRoot(username, password string) *RootDir {
 
 type GistDir struct {
 	nodefs.Node
+
+	client *Client
 
 	gist *Gist
 }
@@ -228,9 +231,10 @@ func (dir *GistDir) List() ([]FileNode, error) {
 	var index int
 	for name, file := range files {
 		children[index] = &File{
-			Node: nodefs.NewDefaultNode(),
-			name: name,
-			file: file,
+			Node:   nodefs.NewDefaultNode(),
+			client: dir.client,
+			name:   name,
+			file:   file,
 		}
 		index++
 	}
@@ -293,6 +297,8 @@ func (f *GistMetaDir) List() ([]FileNode, error) {
 type File struct {
 	nodefs.Node
 
+	client *Client
+
 	name string
 	file *GistFile
 }
@@ -320,7 +326,7 @@ func (f *File) Open(flags uint32, ctx *fuse.Context) (nodefs.File, fuse.Status) 
 	if flags&fuse.O_ANYWRITE != 0 {
 		return nil, fuse.EPERM
 	}
-	content, err := f.file.FetchContent()
+	content, err := f.client.FetchContent(f.file.RawUrl)
 	if err != nil {
 		return nil, fuse.ToStatus(err)
 	}
