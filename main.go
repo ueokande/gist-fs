@@ -66,6 +66,7 @@ func run() int {
 	err := mountAndWait(*username, *password, args[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to mount:", err)
+		return 1
 	}
 
 	return 0
