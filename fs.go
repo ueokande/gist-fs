@@ -9,7 +9,7 @@ import (
 
 var CachePeriod = time.Duration(5 * time.Minute)
 
-type FileNode interface {
+type Node interface {
 	nodefs.Node
 
 	Name() string
@@ -33,7 +33,7 @@ func (f *StringFile) IsDir() bool {
 
 func (f *StringFile) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
 	out.Size = uint64(len([]byte(f.value)) + 1)
-	out.Mode = fuse.S_IFREG | 0444
+	out.Mode = fuse.S_IFREG | 0644
 	return fuse.OK
 }
 
@@ -61,7 +61,7 @@ func (f *BoolFile) IsDir() bool {
 
 func (f *BoolFile) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
 	out.Size = 2
-	out.Mode = fuse.S_IFREG | 0444
+	out.Mode = fuse.S_IFREG | 0644
 	return fuse.OK
 }
 
@@ -79,7 +79,7 @@ type DirNode interface {
 	nodefs.Node
 
 	Name() string
-	List() ([]FileNode, error)
+	List() ([]Node, error)
 }
 
 func openDir(dir DirNode) ([]fuse.DirEntry, fuse.Status) {
@@ -93,9 +93,9 @@ func openDir(dir DirNode) ([]fuse.DirEntry, fuse.Status) {
 	for i, f := range files {
 		var mode uint32
 		if f.IsDir() {
-			mode = fuse.S_IFDIR | 0555
+			mode = fuse.S_IFDIR | 0755
 		} else {
-			mode = fuse.S_IFREG | 0444
+			mode = fuse.S_IFREG | 0644
 		}
 		entries[i] = fuse.DirEntry{
 			Name: f.Name(),
@@ -107,12 +107,28 @@ func openDir(dir DirNode) ([]fuse.DirEntry, fuse.Status) {
 	return entries, fuse.OK
 }
 
+func lookup(dir DirNode, out *fuse.Attr, name string, context *fuse.Context) (*nodefs.Inode, fuse.Status) {
+	_, status := openDir(dir)
+	if status != fuse.OK {
+		return nil, status
+	}
+	c := dir.Inode().GetChild(name)
+	if c == nil {
+		return nil, fuse.ENOENT
+	}
+	status = c.Node().GetAttr(out, nil, context)
+	if status != fuse.OK {
+		return nil, status
+	}
+	return c, fuse.OK
+}
+
 type RootDir struct {
 	nodefs.Node
 
 	server *fuse.Server
 
-	user *User
+	client *Client
 
 	lastFetchAt time.Time
 	cache       []*Gist
@@ -122,25 +138,30 @@ func (dir *RootDir) OpenDir(ctx *fuse.Context) ([]fuse.DirEntry, fuse.Status) {
 	return openDir(dir)
 }
 
+func (dir *RootDir) Lookup(out *fuse.Attr, name string, context *fuse.Context) (*nodefs.Inode, fuse.Status) {
+	return lookup(dir, out, name, context)
+}
+
 func (dir *RootDir) Name() string {
 	panic("root directory has no names")
 }
 
-func (dir *RootDir) List() ([]FileNode, error) {
+func (dir *RootDir) List() ([]Node, error) {
 	if now := time.Now(); dir.lastFetchAt.Add(CachePeriod).Before(time.Now()) {
 		var err error
-		dir.cache, err = dir.user.FetchGists()
+		dir.cache, err = dir.client.FetchGists()
 		if err != nil {
 			return nil, err
 		}
 		dir.lastFetchAt = now
 	}
 
-	children := make([]FileNode, len(dir.cache))
+	children := make([]Node, len(dir.cache))
 	for i, gist := range dir.cache {
 		children[i] = &GistDir{
-			Node: nodefs.NewDefaultNode(),
-			gist: gist,
+			Node:   nodefs.NewDefaultNode(),
+			client: dir.client,
+			gist:   gist,
 		}
 
 	}
@@ -165,7 +186,7 @@ func (dir *RootDir) Unmount() error {
 func NewRoot(username, password string) *RootDir {
 	return &RootDir{
 		Node: nodefs.NewDefaultNode(),
-		user: &User{
+		client: &Client{
 			Username: username,
 			Password: password,
 		},
@@ -174,6 +195,8 @@ func NewRoot(username, password string) *RootDir {
 
 type GistDir struct {
 	nodefs.Node
+
+	client *Client
 
 	gist *Gist
 }
@@ -187,7 +210,7 @@ func (dir *GistDir) IsDir() bool {
 }
 
 func (f *GistDir) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
-	out.Mode = fuse.S_IFDIR | 0555
+	out.Mode = fuse.S_IFDIR | 0755
 	out.Ctime = uint64(f.gist.CreatedAt.Unix())
 	out.Mtime = uint64(f.gist.UpdatedAt.Unix())
 
@@ -198,15 +221,25 @@ func (dir *GistDir) OpenDir(ctx *fuse.Context) ([]fuse.DirEntry, fuse.Status) {
 	return openDir(dir)
 }
 
-func (dir *GistDir) List() ([]FileNode, error) {
-	files := dir.gist.ListFiles()
-	children := make([]FileNode, len(files)+1) // +1 : meta directory
+func (dir *GistDir) Lookup(out *fuse.Attr, name string, context *fuse.Context) (*nodefs.Inode, fuse.Status) {
+	return lookup(dir, out, name, context)
+}
+
+func (dir *GistDir) List() ([]Node, error) {
+	files := dir.gist.Files
+	children := make([]Node, len(files)+1) // +1 : meta directory
 	var index int
 	for name, file := range files {
-		children[index] = &File{
-			Node: nodefs.NewDefaultNode(),
-			name: name,
-			file: file,
+		children[index] = &FileNode{
+			Node:   nodefs.NewDefaultNode(),
+			client: dir.client,
+			name:   name,
+			file: &File{
+				File:   nodefs.NewDefaultFile(),
+				gist:   file,
+				client: dir.client,
+				name:   name,
+			},
 		}
 		index++
 	}
@@ -232,7 +265,7 @@ func (f *GistMetaDir) IsDir() bool {
 }
 
 func (f *GistMetaDir) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
-	out.Mode = fuse.S_IFDIR | 0555
+	out.Mode = fuse.S_IFDIR | 0755
 	out.Ctime = uint64(f.gist.CreatedAt.Unix())
 	out.Mtime = uint64(f.gist.UpdatedAt.Unix())
 
@@ -242,8 +275,12 @@ func (f *GistMetaDir) OpenDir(ctx *fuse.Context) ([]fuse.DirEntry, fuse.Status) 
 	return openDir(f)
 }
 
-func (f *GistMetaDir) List() ([]FileNode, error) {
-	return []FileNode{
+func (dir *GistMetaDir) Lookup(out *fuse.Attr, name string, context *fuse.Context) (*nodefs.Inode, fuse.Status) {
+	return lookup(dir, out, name, context)
+}
+
+func (f *GistMetaDir) List() ([]Node, error) {
+	return []Node{
 		&StringFile{
 			Node:  nodefs.NewDefaultNode(),
 			name:  "description",
@@ -262,39 +299,109 @@ func (f *GistMetaDir) List() ([]FileNode, error) {
 	}, nil
 }
 
-type File struct {
+type FileNode struct {
 	nodefs.Node
 
+	client *Client
+
 	name string
-	file *GistFile
+
+	file *File
 }
 
-func (dir *File) Name() string {
+func (dir *FileNode) Name() string {
 	return dir.name
 }
 
-func (dir *File) IsDir() bool {
+func (dir *FileNode) IsDir() bool {
 	return false
 }
 
-func (f *File) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
-	out.Size = f.file.Size
-	out.Mode = fuse.S_IFREG | 0444
+func (f *FileNode) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
+	out.Size = f.file.gist.Size
+	out.Mode = fuse.S_IFREG | 0644
 
 	// TODO ctime/mtime from revision?
-	out.Ctime = uint64(f.file.Gist.CreatedAt.Unix())
-	out.Mtime = uint64(f.file.Gist.UpdatedAt.Unix())
+	out.Ctime = uint64(f.file.gist.Gist.CreatedAt.Unix())
+	out.Mtime = uint64(f.file.gist.Gist.UpdatedAt.Unix())
 
 	return fuse.OK
 }
 
-func (f *File) Open(flags uint32, ctx *fuse.Context) (nodefs.File, fuse.Status) {
-	if flags&fuse.O_ANYWRITE != 0 {
-		return nil, fuse.EPERM
-	}
-	content, err := f.file.FetchContent()
+func (f *FileNode) Open(flags uint32, ctx *fuse.Context) (nodefs.File, fuse.Status) {
+	err := f.file.FetchGistFile()
 	if err != nil {
 		return nil, fuse.ToStatus(err)
 	}
-	return nodefs.NewDataFile(content), fuse.OK
+	return f.file, fuse.OK
+}
+
+func (f *FileNode) Utimens(file nodefs.File, atime *time.Time, mtime *time.Time, ctx *fuse.Context) fuse.Status {
+	*atime = time.Now()
+	*mtime = time.Now()
+	return fuse.OK
+}
+
+func (f *FileNode) Truncate(file nodefs.File, size uint64, context *fuse.Context) (code fuse.Status) {
+	return f.file.Truncate(size)
+}
+
+type File struct {
+	nodefs.File
+	name   string
+	gist   *GistFile
+	client *Client
+
+	content     []byte
+	atime       time.Time
+	localMtime  time.Time
+	remoteMtime time.Time
+}
+
+func (f *File) FetchGistFile() error {
+	if f.content == nil {
+		var err error
+		f.content, err = f.client.FetchContent(f.gist.RawUrl)
+		if err != nil {
+			return err
+		}
+		f.atime = time.Now()
+	}
+	return nil
+}
+
+func (f *File) Read(dest []byte, off int64) (fuse.ReadResult, fuse.Status) {
+	return fuse.ReadResultData(f.content), fuse.OK
+}
+
+func (f *File) Write(data []byte, off int64) (written uint32, code fuse.Status) {
+	if int(off)+len(data) > len(f.content) {
+		index := len(f.content) - int(off)
+		copy(f.content[off:], data[:index])
+		f.content = append(f.content, data[index:]...)
+	} else {
+		copy(f.content[off:], data)
+	}
+
+	f.localMtime = time.Now()
+
+	return uint32(len(data)), fuse.OK
+}
+
+func (f *File) Truncate(size uint64) fuse.Status {
+	f.content = nil
+	return fuse.OK
+}
+
+func (f *File) Flush() fuse.Status {
+	if !f.localMtime.After(f.remoteMtime) {
+		return fuse.OK
+	}
+
+	err := f.client.UpdateContent(f.gist.Gist.Id, f.name, string(f.content))
+	if err != nil {
+		return fuse.ToStatus(err)
+	}
+	f.remoteMtime = f.localMtime
+	return fuse.OK
 }
