@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -9,8 +8,16 @@ import (
 )
 
 type Client struct {
-	Username string
-	Password string
+	RestClient
+}
+
+func NewClient(username, password string) *Client {
+	return &Client{
+		RestClient{
+			Username: username,
+			Password: password,
+		},
+	}
 }
 
 type Error struct {
@@ -23,15 +30,9 @@ func (c *Client) FetchGists() ([]*Gist, error) {
 	log.Printf("GET %s\n", url)
 
 	var gists []*Gist
-	err := getJson(url, c.Username, c.Password, &gists)
+	err := c.Get(url, &gists)
 	if err != nil {
 		return nil, err
-	}
-
-	for _, gist := range gists {
-		for _, file := range gist.Files {
-			file.Gist = gist
-		}
 	}
 
 	log.Printf("Fetched %d gists", len(gists))
@@ -51,7 +52,14 @@ type Gist struct {
 type GistFile struct {
 	Size   uint64
 	RawUrl string `json:"raw_url"`
-	Gist   *Gist
+}
+
+type EditGistForm struct {
+	Description *string
+	Files       map[string]*struct {
+		Filename *string
+		Content  *string
+	}
 }
 
 func (c *Client) FetchContent(url string) ([]byte, error) {
@@ -76,37 +84,6 @@ func (c *Client) FetchContent(url string) ([]byte, error) {
 	return bytes, nil
 }
 
-type EditGistForm struct {
-	Description *string
-	Files       map[string]*struct {
-		Filename *string
-		Content  *string
-	}
-}
-
-func (f *EditGistForm) MarshalJSON() ([]byte, error) {
-	hash := make(map[string]interface{})
-	if f.Description != nil {
-		hash["description"] = f.Description
-	}
-	files := make(map[string]interface{})
-	for k, v := range f.Files {
-		if v == nil {
-			files[k] = nil
-		} else {
-			file := make(map[string]interface{})
-			if v.Filename != nil {
-				file["filename"] = v.Filename
-			}
-			if v.Content != nil {
-				file["content"] = v.Content
-			}
-			files[k] = file
-		}
-	}
-	hash["files"] = files
-	return json.Marshal(hash)
-}
 func (c *Client) UpdateContent(id string, name string, content string) error {
 	url := "https://api.github.com/gists/" + id
 	log.Printf("PATCH %s\n", url)
@@ -122,5 +99,5 @@ func (c *Client) UpdateContent(id string, name string, content string) error {
 	}{
 		Content: &content,
 	}
-	return patchJson(url, c.Username, c.Password, &form, nil)
+	return c.Patch(url, &form, nil)
 }

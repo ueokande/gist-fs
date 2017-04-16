@@ -185,11 +185,8 @@ func (dir *RootDir) Unmount() error {
 
 func NewRoot(username, password string) *RootDir {
 	return &RootDir{
-		Node: nodefs.NewDefaultNode(),
-		client: &Client{
-			Username: username,
-			Password: password,
-		},
+		Node:   nodefs.NewDefaultNode(),
+		client: NewClient(username, password),
 	}
 }
 
@@ -231,14 +228,14 @@ func (dir *GistDir) List() ([]Node, error) {
 	var index int
 	for name, file := range files {
 		children[index] = &FileNode{
-			Node:   nodefs.NewDefaultNode(),
-			client: dir.client,
-			name:   name,
+			Node: nodefs.NewDefaultNode(),
+			name: name,
 			file: &File{
-				File:   nodefs.NewDefaultFile(),
-				gist:   file,
-				client: dir.client,
-				name:   name,
+				File:     nodefs.NewDefaultFile(),
+				gist:     dir.gist,
+				gistFile: file,
+				client:   dir.client,
+				name:     name,
 			},
 		}
 		index++
@@ -302,8 +299,6 @@ func (f *GistMetaDir) List() ([]Node, error) {
 type FileNode struct {
 	nodefs.Node
 
-	client *Client
-
 	name string
 
 	file *File
@@ -318,12 +313,12 @@ func (dir *FileNode) IsDir() bool {
 }
 
 func (f *FileNode) GetAttr(out *fuse.Attr, file nodefs.File, ctx *fuse.Context) fuse.Status {
-	out.Size = f.file.gist.Size
+	out.Size = f.file.gistFile.Size
 	out.Mode = fuse.S_IFREG | 0644
 
 	// TODO ctime/mtime from revision?
-	out.Ctime = uint64(f.file.gist.Gist.CreatedAt.Unix())
-	out.Mtime = uint64(f.file.gist.Gist.UpdatedAt.Unix())
+	out.Ctime = uint64(f.file.fetchedAt.Unix())
+	out.Mtime = uint64(f.file.localMtime.Unix())
 
 	return fuse.OK
 }
@@ -336,36 +331,30 @@ func (f *FileNode) Open(flags uint32, ctx *fuse.Context) (nodefs.File, fuse.Stat
 	return f.file, fuse.OK
 }
 
-func (f *FileNode) Utimens(file nodefs.File, atime *time.Time, mtime *time.Time, ctx *fuse.Context) fuse.Status {
-	*atime = time.Now()
-	*mtime = time.Now()
-	return fuse.OK
-}
-
 func (f *FileNode) Truncate(file nodefs.File, size uint64, context *fuse.Context) (code fuse.Status) {
 	return f.file.Truncate(size)
 }
 
 type File struct {
 	nodefs.File
-	name   string
-	gist   *GistFile
-	client *Client
+	name string
 
-	content     []byte
-	atime       time.Time
-	localMtime  time.Time
-	remoteMtime time.Time
+	client   *Client
+	gistFile *GistFile
+	gist     *Gist
+
+	content    []byte
+	localMtime time.Time
+	fetchedAt  time.Time
 }
 
 func (f *File) FetchGistFile() error {
 	if f.content == nil {
 		var err error
-		f.content, err = f.client.FetchContent(f.gist.RawUrl)
+		f.content, err = f.client.FetchContent(f.gistFile.RawUrl)
 		if err != nil {
 			return err
 		}
-		f.atime = time.Now()
 	}
 	return nil
 }
@@ -394,14 +383,14 @@ func (f *File) Truncate(size uint64) fuse.Status {
 }
 
 func (f *File) Flush() fuse.Status {
-	if !f.localMtime.After(f.remoteMtime) {
+	if !f.localMtime.After(f.fetchedAt) {
 		return fuse.OK
 	}
 
-	err := f.client.UpdateContent(f.gist.Gist.Id, f.name, string(f.content))
+	err := f.client.UpdateContent(f.gist.Id, f.name, string(f.content))
 	if err != nil {
 		return fuse.ToStatus(err)
 	}
-	f.remoteMtime = f.localMtime
+	f.fetchedAt = f.localMtime
 	return fuse.OK
 }
