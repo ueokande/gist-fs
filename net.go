@@ -13,7 +13,7 @@ type RestClient struct {
 	Password string
 }
 
-func (c *RestClient) newRequest(method, url string, params interface{}) (*http.Request, error) {
+func (c *RestClient) NewRequest(method, url string, params interface{}) (*http.Request, error) {
 	var body io.Reader
 	if params != nil {
 		input, err := json.Marshal(params)
@@ -32,7 +32,7 @@ func (c *RestClient) newRequest(method, url string, params interface{}) (*http.R
 }
 
 func (c *RestClient) Do(method, url string, params interface{}, result interface{}) error {
-	req, err := c.newRequest(method, url, params)
+	req, err := c.NewRequest(method, url, params)
 	if err != nil {
 		return err
 	}

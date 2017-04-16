@@ -63,18 +63,16 @@ type EditGistForm struct {
 }
 
 func (c *Client) FetchContent(url string) ([]byte, error) {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.SetBasicAuth(c.Username, c.Password)
-
-	resp, err := http.DefaultClient.Do(req)
+	req, err := c.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	log.Printf("GET %s\n", url)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
 
 	defer resp.Body.Close()
 	bytes, err := ioutil.ReadAll(resp.Body)
@@ -86,7 +84,6 @@ func (c *Client) FetchContent(url string) ([]byte, error) {
 
 func (c *Client) UpdateContent(id string, name string, content string) error {
 	url := "https://api.github.com/gists/" + id
-	log.Printf("PATCH %s\n", url)
 	form := EditGistForm{
 		Files: make(map[string]*struct {
 			Filename *string
@@ -99,5 +96,7 @@ func (c *Client) UpdateContent(id string, name string, content string) error {
 	}{
 		Content: &content,
 	}
+
+	log.Printf("PATCH %s\n", url)
 	return c.Patch(url, &form, nil)
 }
