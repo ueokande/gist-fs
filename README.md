@@ -12,7 +12,7 @@ gist-fs -u <username> -p <access_token> path/to/mount/point
 # Installation
 
 ```
-go get github.com/ueokande.gist-fs
+go get github.com/ueokande/gist-fs
 ```
 
 # Licence
